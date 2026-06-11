@@ -326,6 +326,11 @@
 
   /* ---------- guestbook ---------- */
   .guestbook { background: var(--paper-warm); }
+  .gb-note {
+    font-family: var(--sans); font-size: 13px; color: var(--muted);
+    margin: -8px 0 36px; line-height: 1.7;
+  }
+  body[data-lang="ko"] .gb-note { font-family: var(--serif-ko); }
   .gb-form { margin-bottom: 56px; }
   .gb-list { display: flex; flex-direction: column; gap: 18px; max-width: 560px; margin: 0 auto; }
   .gb-card {
@@ -346,7 +351,13 @@
     white-space: pre-wrap; word-break: break-word;
   }
   body[data-lang="ko"] .gb-card .gb-text { font-family: var(--serif-ko); font-size: 0.95rem; }
-  .gb-empty { font-family: var(--sans); font-size: 13px; color: var(--muted); text-align: center; }
+  .gb-more {
+    margin: 6px auto 0; padding: 11px 26px; display: block;
+    background: none; border: 1px solid var(--line); border-radius: 999px;
+    font-family: var(--sans); font-size: 12px; letter-spacing: 0.14em;
+    color: var(--muted); cursor: pointer; transition: all 0.25s ease;
+  }
+  .gb-more:hover { border-color: var(--ink); color: var(--ink); }
 
   /* ---------- closing ---------- */
   .closing { text-align: center; padding: 110px 24px 60px; }
@@ -940,6 +951,10 @@
     <div class="wrap reveal">
       <p class="section-label"><span class="en">Guestbook</span><span class="ko">방명록</span></p>
       <h2 class="section-title"><span class="en">Leave us a note</span><span class="ko">축하의 한마디</span></h2>
+      <p class="gb-note">
+        <span class="en">Your message goes straight to the two of us — we'll read every one.</span>
+        <span class="ko">남겨주신 메시지는 저희 두 사람에게 전해져요. 하나하나 소중히 읽을게요.</span>
+      </p>
 
       <form class="rsvp-form gb-form" id="gbForm">
         <div class="field">
@@ -1235,7 +1250,8 @@
     formAction: 'https://docs.google.com/forms/d/e/1FAIpQLSfJZwm97TZhIWAA5onhxMd8mYx9EFxbnUobmItElW2pX_bmlA/formResponse',
     entryName: 'entry.695698377',
     entryMessage: 'entry.879228111',
-    sheetId: '1W-wgI9XOO0m9ueLqqnOyPxxnS7w82eV6XDeHwbcGNsU'
+    sheetId: '1W-wgI9XOO0m9ueLqqnOyPxxnS7w82eV6XDeHwbcGNsU',
+    showMessages: false      // false: messages go to the couple only (sheet). true: display publicly on the site.
   };
   (function guestbook() {
     const section = document.getElementById('guestbook');
@@ -1284,16 +1300,26 @@
           };
         }).filter(e => e.name && e.text);
         list.textContent = '';
-        if (!entries.length) {
-          const empty = document.createElement('div'); empty.className = 'gb-empty';
-          empty.textContent = body.getAttribute('data-lang') === 'ko' ? '첫 번째 축하 메시지를 남겨주세요 ♥' : 'Be the first to leave a note ♥';
-          list.appendChild(empty);
-          return;
+        if (!entries.length) return; // no messages yet — show nothing below the form
+        const all = entries.reverse();
+        const FIRST = 10;
+        all.slice(0, FIRST).forEach(e => list.appendChild(card(e.name, e.text, e.when)));
+        if (all.length > FIRST) {
+          const more = document.createElement('button');
+          more.type = 'button'; more.className = 'gb-more';
+          const rest = all.length - FIRST;
+          more.textContent = body.getAttribute('data-lang') === 'ko'
+            ? '메시지 ' + rest + '개 더보기'
+            : 'Show ' + rest + ' more message' + (rest > 1 ? 's' : '');
+          more.addEventListener('click', () => {
+            all.slice(FIRST).forEach(e => list.appendChild(card(e.name, e.text, e.when)));
+            more.remove();
+          });
+          list.appendChild(more);
         }
-        entries.reverse().slice(0, 50).forEach(e => list.appendChild(card(e.name, e.text, e.when)));
       } catch (e) { /* sheet unreachable — leave list empty, writing still works */ }
     }
-    loadEntries();
+    if (GUESTBOOK.showMessages) loadEntries();
     gbForm.addEventListener('submit', async (e) => {
       e.preventDefault();
       const name = gbForm['gb-name'].value.trim();
@@ -1305,12 +1331,15 @@
       fd.append(GUESTBOOK.entryMessage, text);
       try {
         await fetch(GUESTBOOK.formAction, { method: 'POST', mode: 'no-cors', body: fd });
-        const empty = list.querySelector('.gb-empty'); if (empty) empty.remove();
-        list.prepend(card(name, text, fmtDate(new Date())));
+        
+        if (GUESTBOOK.showMessages) list.prepend(card(name, text, fmtDate(new Date())));
         gbForm['gb-msg'].value = '';
         gbMsg.className = 'rsvp-msg';
-        gbMsg.textContent = body.getAttribute('data-lang') === 'ko' ? '감사합니다 ♥' : 'Thank you ♥';
-        setTimeout(() => { gbMsg.textContent = ''; }, 2500);
+        const ko = body.getAttribute('data-lang') === 'ko';
+        gbMsg.textContent = GUESTBOOK.showMessages
+          ? (ko ? '감사합니다 ♥' : 'Thank you ♥')
+          : (ko ? '메시지가 저희에게 전해졌어요. 감사합니다 ♥' : 'Your note is on its way to us. Thank you ♥');
+        setTimeout(() => { gbMsg.textContent = ''; }, 3500);
       } catch (err) {
         gbMsg.className = 'rsvp-msg err';
         gbMsg.textContent = body.getAttribute('data-lang') === 'ko' ? '오류가 발생했어요. 다시 시도해주세요.' : 'Something went wrong — please try again.';
